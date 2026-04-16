@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Obsidian workspace state (keep config, ignore local state)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+
+# Raw source documents — keep structure, ignore content
+# Uncomment if you don't want to commit your sources:
+# raw/*.pdf
+# raw/*.docx
+# raw/*.txt
+# raw/assets/
+
+# Python
+__pycache__/
+*.pyc
+.env
+
+# Node
+node_modules/

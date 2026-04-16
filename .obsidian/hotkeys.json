@@ -1,0 +1,5 @@
+{
+  "graph:open": [{ "modifiers": ["Mod"], "key": "G" }],
+  "switcher:open": [{ "modifiers": ["Mod"], "key": "O" }],
+  "editor:toggle-source": [{ "modifiers": ["Mod"], "key": "E" }]
+}
