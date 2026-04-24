@@ -5,6 +5,7 @@ Thumbs.db
 # Obsidian workspace state (keep config, ignore local state)
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
+wiki/.obsidian/
 
 # Raw source documents — keep structure, ignore content
 # Uncomment if you don't want to commit your sources:
@@ -20,3 +21,13 @@ __pycache__/
 
 # Node
 node_modules/
+
+# Deep ingest temp files
+_staging_chapters/
+_fetch_chapters.py
+_query_chapters.py
+deep_ingest_chapters.json
+chapter_content.json
+chapter_summaries.json
+moorcheh_answer.txt
+moorcheh_search.txt
