@@ -118,7 +118,15 @@ At the beginning of every session:
 
 **Trigger:** User says `ingest raw/<filename>`
 
-**Standard LLM Wiki steps:**
+**⚠️ Pre-check: File size and format**
+
+Before reading any source file, check its type and size:
+- If the file is a **binary format** (PDF, DOCX, XLSX) or exceeds **200K characters**: use **Deep Ingest** (see below)
+- If the file is plain text/markdown under 200K characters: proceed with Standard Ingest
+
+Large documents silently truncate when read into the LLM prompt window. There is no error — the agent simply never sees the later content. Deep Ingest eliminates this by letting Moorcheh handle extraction.
+
+**Standard Ingest steps (for small text files):**
 
 1. Read the source file from `raw/`
 2. Discuss key takeaways with the user — ask what to emphasize
@@ -137,17 +145,83 @@ At the beginning of every session:
 
 **Moorcheh enhancement — after standard steps:**
 
-9. Upload all new and updated wiki pages to Moorcheh:
+9. Upload all new and updated wiki pages to Moorcheh using `upload_file` (preferred):
+   ```python
+   client.documents.upload_file(namespace_name="wiki-<topic>", file_path="wiki/<page>.md")
    ```
-   /moorcheh:upload namespace "wiki-<topic>" file "<path-to-page.md>"
+   Or batch upload all wiki pages:
+   ```bash
+   python .agents/skills/moorcheh/scripts/upload_file.py --namespace "wiki-<topic>" --dir "wiki/"
    ```
-   Upload each new or updated page individually. After uploading, flip
-   `moorcheh_uploaded: true` in the page's frontmatter.
+   **Important:** The `upload_file` method sends the file directly to Moorcheh without the agent
+   reading or modifying it. Never open source files for writing during the upload step.
 
 10. Append to log:
     ```
     Moorcheh: uploaded N pages to namespace "wiki-<topic>"
     ```
+
+---
+
+### 🟣 DEEP INGEST — Large Documents & Binary Formats
+
+**Trigger:** User says `ingest raw/<filename>` where the file is a PDF, DOCX, XLSX, or exceeds 200K characters.
+
+**Why:** LLM prompt windows silently truncate large files. A 365K-character book will lose ~45% of its content with no error or warning. Deep Ingest solves this by uploading the file to Moorcheh first — Moorcheh handles extraction, chunking, and indexing — then the agent queries chapter-by-chapter to build wiki pages with full coverage.
+
+**Steps:**
+
+1. Create a temporary **staging namespace**:
+   ```python
+   client.namespaces.create(namespace_name="staging-<slug>", type="text")
+   ```
+
+2. Upload the raw file to staging — Moorcheh extracts text, chunks, and indexes automatically:
+   ```python
+   client.documents.upload_file(namespace_name="staging-<slug>", file_path="raw/<filename>")
+   ```
+   Wait 10–15 seconds for indexing to complete.
+   Note: If the file exceeds 10MB, extract text to `.txt` first and upload that.
+
+3. **Discover the document structure** by querying the staging namespace:
+   ```python
+   results = client.similarity_search.query(
+       namespaces=["staging-<slug>"],
+       query="table of contents chapters sections",
+       top_k=20
+   )
+   ```
+
+4. **Query chapter-by-chapter** to retrieve full content for each section:
+   ```python
+   results = client.similarity_search.query(
+       namespaces=["staging-<slug>"],
+       query="<chapter title or topic>",
+       top_k=15
+   )
+   ```
+   Use `top_k=15` or higher to ensure full chapter coverage.
+
+5. For each chapter's results, follow **Standard Ingest steps 2–8** (discuss with user, create wiki pages, update glossary/index/overview, log).
+
+6. After all chapters are processed, **batch upload** all wiki pages to the permanent wiki namespace:
+   ```bash
+   python .agents/skills/moorcheh/scripts/upload_file.py --namespace "wiki-<topic>" --dir "wiki/"
+   ```
+
+7. **Delete the staging namespace**:
+   ```python
+   client.namespaces.delete(namespace_name="staging-<slug>")
+   ```
+
+8. Append to log:
+   ```
+   ## [YYYY-MM-DD] deep-ingest | <Source Title>
+   Method: Moorcheh staging (full extraction)
+   Pages created: X | Updated: Y
+   Moorcheh: uploaded N pages to "wiki-<topic>"
+   Staging namespace "staging-<slug>" deleted
+   ```
 
 ---
 
@@ -301,6 +375,7 @@ Parse tip: `grep "^## \[" wiki/log.md | head -10` for recent history.
 - **Use metadata filters aggressively** — `#type:entity`, `#tags:competitive`, `#created:2026` narrow results instantly.
 - **Don't write wiki pages yourself** — your job is to find good sources and ask good questions. Let the agent do the bookkeeping.
 - **Sync after every ingest** — the `moorcheh_uploaded` flag in frontmatter is your sync status tracker.
+- **Use Deep Ingest for large files** — any PDF, DOCX, or file over 200K chars should go through Moorcheh staging. The agent should never try to read a large binary file directly.
 
 ---
 

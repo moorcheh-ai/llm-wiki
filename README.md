@@ -205,6 +205,24 @@ lint
 
 Agent health-checks for: contradictions, orphan pages, stale claims, concept gaps, glossary coverage, Moorcheh sync status.
 
+### Deep Ingest (Large Documents)
+
+For documents that exceed the LLM prompt window (200K+ characters) or binary formats (PDF, DOCX, XLSX):
+
+```
+ingest raw/large-book.pdf
+```
+
+The agent automatically detects large/binary files and switches to Deep Ingest:
+
+1. Uploads the raw file to a Moorcheh **staging namespace** — Moorcheh extracts text, chunks, and indexes automatically
+2. Queries the staging namespace chapter-by-chapter to retrieve full content
+3. Builds wiki pages from the results (same quality as standard ingest, but with zero truncation)
+4. Batch uploads all wiki pages to the permanent wiki namespace
+5. Deletes the staging namespace
+
+**Why this matters:** Standard LLM Wiki silently truncates large files at the prompt window boundary. A 365K-character book loses ~45% of its content with no error. Deep Ingest via Moorcheh guarantees full coverage for any file size and format.
+
 ---
 
 ## Moorcheh Commands

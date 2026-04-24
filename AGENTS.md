@@ -74,6 +74,14 @@ moorcheh_uploaded: false   # flip to true after uploading
 
 **Trigger:** `ingest raw/<filename>`
 
+**Pre-check:** Before reading any source file, check its type and size:
+- If **binary format** (PDF, DOCX, XLSX) or **> 200K characters**: use **DEEP INGEST** (below)
+- If plain text/markdown under 200K characters: proceed with Standard Ingest
+
+Large documents silently truncate in the LLM prompt window with no error. Deep Ingest eliminates this.
+
+**Standard Ingest (small text files):**
+
 1. Read source from `raw/`
 2. Discuss key takeaways with user
 3. Create `wiki/sources/<slug>.md`
@@ -82,12 +90,30 @@ moorcheh_uploaded: false   # flip to true after uploading
 6. Update `wiki/index.md`
 7. Update `wiki/overview.md` if big picture shifted
 8. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <Title>`
-9. **Moorcheh:** Upload all new/updated pages:
+9. **Moorcheh:** Upload all new/updated pages using `upload_file` (preferred):
+   ```python
+   client.documents.upload_file(namespace_name="wiki-<topic>", file_path="wiki/<page>.md")
    ```
-   /moorcheh:upload namespace "wiki-<topic>" file "<page.md>"
-   ```
-   Flip `moorcheh_uploaded: true` in each uploaded page's frontmatter.
+   Or batch: `python .agents/skills/moorcheh/scripts/upload_file.py --namespace "wiki-<topic>" --dir "wiki/"`
 10. Log: `Moorcheh: uploaded N pages to "wiki-<topic>"`
+
+---
+
+## DEEP INGEST
+
+**Trigger:** `ingest raw/<filename>` where file is PDF, DOCX, XLSX, or > 200K characters.
+
+Moorcheh handles extraction, chunking, and indexing. The agent never reads the raw file.
+
+1. Create staging namespace: `client.namespaces.create(namespace_name="staging-<slug>", type="text")`
+2. Upload raw file: `client.documents.upload_file(namespace_name="staging-<slug>", file_path="raw/<file>")`
+3. Wait 10–15 seconds for indexing
+4. Discover structure: query `"table of contents chapters sections"` with `top_k=20`
+5. Query chapter-by-chapter (`top_k=15`) to retrieve full content
+6. For each chapter: follow Standard Ingest steps 2–8 (discuss, create pages, update glossary/index/overview)
+7. Batch upload wiki pages: `upload_file.py --namespace "wiki-<topic>" --dir "wiki/"`
+8. Delete staging: `client.namespaces.delete(namespace_name="staging-<slug>")`
+9. Log: `## [YYYY-MM-DD] deep-ingest | <Title>` with method, pages created, staging deleted
 
 ---
 
