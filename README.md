@@ -18,16 +18,28 @@ The idea went viral. 5,000+ stars, 1,900+ forks, 485+ comments in days. The comm
 
 **This repo is the Moorcheh-enhanced version of that pattern.**
 
-Karpathy's original design is elegant and works well up to a few hundred wiki pages. Beyond that, navigating a flat folder of markdown files degrades — and the index.md approach has no semantic understanding, no metadata filtering, and no relevance scoring.
+---
 
-Moorcheh solves exactly that. By uploading your wiki pages to a Moorcheh namespace after every ingest, your agent gains:
+## Why You Need Moorcheh
 
-- **ITS semantic search** — Information-Theoretic Search that scores relevance without ANN/HNSW approximation
+Karpathy's original design is elegant, but it has two fundamental limitations:
+
+**1. It silently fails on large documents.** The LLM prompt window has a hard limit (~200K characters). When you ingest a book, a research paper, or a technical manual that exceeds this limit, the agent truncates the file with no error and no warning. A 365K-character book loses ~45% of its content. You get an incomplete knowledge base and you don't even know it.
+
+**2. It can't handle binary formats.** PDFs, Word documents, spreadsheets — the most common document formats in the real world — require extraction tools just to read. That's another dependency, another point of failure, and another reason your ingest might silently produce incomplete results.
+
+Moorcheh solves both problems. When you combine LLM Wiki with Moorcheh's backend:
+
+- **Full document ingestion** — Upload any file (PDF, DOCX, XLSX, TXT, CSV, MD) directly to Moorcheh. It handles extraction, chunking, and indexing. The agent queries Moorcheh chapter-by-chapter to build wiki pages with **zero truncation**, regardless of file size.
+- **ITS semantic search** — Information-Theoretic Search that scores relevance without ANN/HNSW approximation. Your wiki becomes searchable at any scale.
 - **Metadata filtering** — filter by page type, tags, date, source
 - **Namespace isolation** — clean separation between topics or teams
+- **Persistent memory** — wiki pages survive session resets. Your knowledge base is permanent.
 - **No scale ceiling** — the same workflow at 50 pages or 5,000
 
-The wiki still lives on disk as plain markdown. Obsidian still works. Git still works. Moorcheh is the search and memory layer that sits underneath — invisible until you need it, essential when you do.
+The wiki still lives on disk as plain markdown. Obsidian still works. Git still works. Moorcheh is the backend that makes it all work at scale — handling the file extraction, semantic indexing, and persistent storage that local LLMs simply cannot do.
+
+> **You will need a free Moorcheh API key.** Sign up at [console.moorcheh.ai](https://console.moorcheh.ai) and generate your key in the API Keys section. The free tier is sufficient for personal wikis.
 
 ---
 
@@ -48,7 +60,12 @@ Question   → Agent searches wiki → Cited answer → Answer saved back to wik
 
 **The wiki is a persistent, compounding artifact.** Every source you add and every question you ask makes it richer. The cross-references are already there. The contradictions have already been flagged. The synthesis already reflects everything you've read.
 
-With Moorcheh, the search layer matches the quality of the wiki itself.
+With Moorcheh, the search layer matches the quality of the wiki itself — and the ingestion layer can handle documents of any size and format.
+
+```
+Original LLM Wiki:          raw file → LLM reads directly → truncated at prompt window
+LLM Wiki + Moorcheh:        raw file → Moorcheh extracts & indexes → agent queries → full coverage
+```
 
 ---
 
@@ -90,7 +107,7 @@ project-root/
 
 ### Prerequisites
 
-- A [Moorcheh account](https://console.moorcheh.ai) (free tier available)
+- A **[Moorcheh API key](https://console.moorcheh.ai)** — sign up for free, then go to API Keys to generate one
 - An AI agent: [Claude Code](https://claude.ai/code), [Cursor](https://cursor.sh), Codex, Gemini CLI, or any agent that reads `CLAUDE.md` / `AGENTS.md`
 - [Obsidian](https://obsidian.md) (free — optional but strongly recommended)
 
@@ -103,11 +120,14 @@ cd llm-wiki
 # Install Moorcheh Agent Skills into your agent
 npx skills add moorcheh-ai/agent-skills
 
-# Set your API key
+# Install the Python SDK
+pip install moorcheh-sdk
+
+# Set your API key (get one free at console.moorcheh.ai)
 export MOORCHEH_API_KEY="your-api-key"
 ```
 
-Get your API key at [console.moorcheh.ai](https://console.moorcheh.ai).
+> **Don't have an API key yet?** Go to [console.moorcheh.ai](https://console.moorcheh.ai), create a free account, and generate your key in the API Keys section. The key looks like `KJ3GgW...bhwx` and goes in the `MOORCHEH_API_KEY` environment variable.
 
 ### 2. Run onboarding and create your namespace
 
@@ -205,6 +225,24 @@ lint
 
 Agent health-checks for: contradictions, orphan pages, stale claims, concept gaps, glossary coverage, Moorcheh sync status.
 
+### Deep Ingest (Large Documents)
+
+For documents that exceed the LLM prompt window (200K+ characters) or binary formats (PDF, DOCX, XLSX):
+
+```
+ingest raw/large-book.pdf
+```
+
+The agent automatically detects large/binary files and switches to Deep Ingest:
+
+1. Uploads the raw file to a Moorcheh **staging namespace** — Moorcheh extracts text, chunks, and indexes automatically
+2. Queries the staging namespace chapter-by-chapter to retrieve full content
+3. Builds wiki pages from the results (same quality as standard ingest, but with zero truncation)
+4. Batch uploads all wiki pages to the permanent wiki namespace
+5. Deletes the staging namespace
+
+**Why this matters:** Standard LLM Wiki silently truncates large files at the prompt window boundary. A 365K-character book loses ~45% of its content with no error. Deep Ingest via Moorcheh guarantees full coverage for any file size and format.
+
 ---
 
 ## Moorcheh Commands
@@ -284,16 +322,20 @@ For multiple concurrent wikis, create one namespace per topic. They stay complet
 
 ## Why Not Just RAG?
 
-| | Traditional RAG | LLM Wiki + Moorcheh |
-|---|---|---|
-| Knowledge accumulation | None — re-derived every query | Compounds with every source and query |
-| Cross-document connections | Re-synthesized each time | Already built into the wiki |
-| Search quality | Keyword or approximate vector | ITS semantic scoring with no ANN drift |
-| Metadata filtering | Limited | Full — type, tag, date, source |
-| Scale ceiling | Degrades with volume | Designed for scale |
-| Transparency | Black-box chunks | Readable, editable markdown pages |
-| Version history | None | Git — full history, branching, collaboration |
-| Session persistence | Lost on close | Permanent — wiki + Moorcheh namespace |
+| | Traditional RAG | LLM Wiki (no Moorcheh) | LLM Wiki + Moorcheh |
+|---|---|---|---|
+| Knowledge accumulation | None — re-derived every query | Compounds over time | Compounds over time |
+| Large document support | Chunk-based (lossy) | **Silent truncation at prompt window** | **Full coverage via Moorcheh extraction** |
+| File format support | Depends on pipeline | Text/markdown only | PDF, DOCX, XLSX, TXT, CSV, JSON, MD |
+| Cross-document connections | Re-synthesized each time | Built into the wiki | Built into the wiki |
+| Search quality | Keyword or approximate vector | Flat index.md | ITS semantic scoring with no ANN drift |
+| Metadata filtering | Limited | None | Full — type, tag, date, source |
+| Scale ceiling | Degrades with volume | Degrades past ~300 pages | Designed for scale |
+| Transparency | Black-box chunks | Readable markdown | Readable markdown |
+| Version history | None | Git | Git |
+| Session persistence | Lost on close | Lost on close | Permanent — wiki + Moorcheh namespace |
+
+The middle column is the key insight: **the original LLM Wiki pattern is great for small documents but breaks silently on large ones.** Moorcheh is what makes it production-ready.
 
 ---
 
@@ -317,6 +359,28 @@ For multiple concurrent wikis, create one namespace per topic. They stay complet
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+## Getting Your Moorcheh API Key
+
+1. Go to [console.moorcheh.ai](https://console.moorcheh.ai)
+2. Sign up for a free account
+3. Navigate to the **API Keys** section
+4. Click **Generate New Key**
+5. Copy the key and set it as an environment variable:
+   ```bash
+   # Linux / macOS
+   export MOORCHEH_API_KEY="your-api-key"
+
+   # Windows PowerShell
+   $env:MOORCHEH_API_KEY = "your-api-key"
+
+   # Windows CMD
+   set MOORCHEH_API_KEY=your-api-key
+   ```
+
+The free tier includes enough namespaces and storage for personal wikis. See [Moorcheh pricing](https://moorcheh.ai) for team and enterprise tiers.
 
 ---
 
